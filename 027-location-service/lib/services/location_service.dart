@@ -3,42 +3,42 @@ import 'dart:async';
 import 'package:location/location.dart';
 import 'package:location_service/datamodels/user_location.dart';
 
+//# Location service:
 class LocationService {
-  // Keep track of current Location
-  UserLocation _currentLocation;
-  Location location = Location();
-  // Continuously emit location updates
-  StreamController<UserLocation> _locationController =
-      StreamController<UserLocation>.broadcast();
+  UserLocation _userLocation;
+  StreamController<UserLocation> _controller = StreamController<UserLocation>();
 
-  LocationService() {
-    location.requestPermission().then((granted) {
-      if (granted == PermissionStatus.granted) {
-        location.onLocationChanged.listen((locationData) {
-          if (locationData != null) {
-            _locationController.add(UserLocation(
-              latitude: locationData.latitude,
-              longitude: locationData.longitude,
-            ));
-          }
+  // Singleton:
+  static LocationService _instance = LocationService._();
+  factory LocationService() => _instance;
+
+  // Private constructor:
+  LocationService._() {
+    var location = Location();
+    location.serviceEnabled().then((bool isEnabledState) {
+      if (!isEnabledState) {
+        location.requestService().then((bool isGrantedState) {
+          if (!isGrantedState) return;
         });
+      }
+      location.hasPermission().then((PermissionStatus isPermittedState) {
+        if (isPermittedState == PermissionStatus.denied) {
+          location.requestPermission().then((PermissionStatus requestedPermissionState) {
+            if (requestedPermissionState != PermissionStatus.granted) return;
+          });
+        }
+      });
+    });
+    location.onLocationChanged.listen((LocationData data) {
+      if (data != null) {
+        _userLocation = UserLocation(latitude: data.latitude, longitude: data.longitude);
+        _controller.add(_userLocation);
       }
     });
   }
 
-  Stream<UserLocation> get locationStream => _locationController.stream;
-
-  Future<UserLocation> getLocation() async {
-    try {
-      var userLocation = await location.getLocation();
-      _currentLocation = UserLocation(
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-      );
-    } catch (e) {
-      print('Could not get the location: $e');
-    }
-
-    return _currentLocation;
-  }
+  // Getters:
+  UserLocation get location => _userLocation;
+  Stream<UserLocation> get locationStream => _controller.stream;
 }
+
